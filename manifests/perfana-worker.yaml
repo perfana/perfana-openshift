@@ -1,0 +1,41 @@
+# BullMQ worker — analysis pipeline; pulls metrics from Grafana.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: perfana-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: perfana-worker}
+  template:
+    metadata:
+      labels: {app: perfana-worker}
+    spec:
+      containers:
+        - name: perfana-worker
+          image: perfana/perfana-worker
+          envFrom:
+            - configMapRef: {name: perfana-params}
+          env:
+            - {name: NODE_ENV, value: production}
+            - {name: LOG_LEVEL, value: info}
+            - {name: PGAPPNAME, value: perfana-worker}
+            - {name: DB_HOST, value: postgres}
+            - {name: DB_PORT, value: "5432"}
+            - {name: DB_USERNAME, value: perfana}
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: perfana-secrets, key: POSTGRES_PASSWORD}}
+            - {name: DB_NAME, value: perfana}
+            - {name: DB_SSL, value: "false"}
+            - {name: DATABASE_URL, value: "postgresql://perfana:$(DB_PASSWORD)@postgres:5432/perfana?sslmode=disable"}
+            - {name: REDIS_HOST, value: valkey}
+            - {name: REDIS_PORT, value: "6379"}
+            - {name: REDIS_URL, value: "redis://valkey:6379"}
+            - {name: GRAFANA_URL, value: "http://grafana:3000"}
+            - {name: GRAFANA_CONCURRENCY, value: "30"}
+            - {name: GRAFANA_BATCH_SIZE, value: "20"}
+            - name: ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: perfana-secrets, key: ENCRYPTION_KEY}}
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {cpu: "4", memory: 4Gi}

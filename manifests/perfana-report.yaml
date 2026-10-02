@@ -1,0 +1,51 @@
+# PDF report generation (headless Chromium).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: perfana-report
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: perfana-report}
+  template:
+    metadata:
+      labels: {app: perfana-report}
+    spec:
+      containers:
+        - name: perfana-report
+          image: perfana/perfana-report
+          env:
+            - {name: NODE_ENV, value: production}
+            - {name: PORT, value: "3003"}
+            - {name: LOG_LEVEL, value: info}
+            - {name: PGAPPNAME, value: perfana-report}
+            - {name: DB_HOST, value: postgres}
+            - {name: DB_PORT, value: "5432"}
+            - {name: DB_USERNAME, value: perfana}
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: perfana-secrets, key: POSTGRES_PASSWORD}}
+            - {name: DB_NAME, value: perfana}
+            - {name: DB_SSL, value: "false"}
+            - {name: REDIS_HOST, value: valkey}
+            - {name: REDIS_PORT, value: "6379"}
+            - {name: BROWSER_POOL_SIZE, value: "1"}
+            - {name: PDF_TIMEOUT_MS, value: "90000"}
+            - {name: QUEUE_CONCURRENCY, value: "1"}
+            - {name: CHROMIUM_EXECUTABLE_PATH, value: /usr/bin/chromium-browser}
+            - {name: PUPPETEER_EXECUTABLE_PATH, value: /usr/bin/chromium-browser}
+            - {name: PUPPETEER_ARGS, value: "--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer"}
+            # Arbitrary OpenShift uid has no writable home; Chromium needs one for its profile.
+            - {name: HOME, value: /tmp}
+            - name: ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: perfana-secrets, key: ENCRYPTION_KEY}}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "1", memory: 2Gi}
+          volumeMounts:
+            - {name: shm, mountPath: /dev/shm}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: shm
+          emptyDir: {medium: Memory, sizeLimit: 1Gi}
+        - name: tmp
+          emptyDir: {}

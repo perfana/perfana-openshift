@@ -1,0 +1,98 @@
+organizationId: __ORG_ID__  # placeholder; rewritten by bootstrap.sh to the real org id
+
+# Generic mean response-time thresholds for the per-workload performance dashboards.
+#
+# Perfana creates one dashboard per workload (performance-test-metrics-<workload>),
+# so an exact dashboardUid would need one stanza per workload -- 36 of them in the
+# reference deployment, and a new workload silently gets no threshold. These entries
+# use regex matching (perfana >= 0.2.95.35) so one stanza covers every current and
+# future workload dashboard.
+#
+# Why regex and not a wildcard (omitted dashboardUid): panel ids are only stable
+# *within* this dashboard family. Panel 101 is "Transaction RT Avg" here but
+# "Average Pause Durations end of minor GC" on spring-boot-kubernetes-jvm-g1gc-mimir,
+# so a wildcard would classify unrelated panels. Precedence is exact > regex >
+# wildcard, so an exact-uid entry elsewhere in this file still wins.
+#
+# absThreshold is a delta against the control group in the panel's own unit -- these
+# panels report ms -- not a fixed ceiling. ADAPT applies it as
+# control_stat_value + absThreshold, so a run is only flagged once the mean moves
+# more than 25 ms, however large the percentage change.
+#
+# Mean only, by design: the percentile panels (102/103/104, 202/203/204) are left
+# unconfigured so they keep ADAPT's default behaviour.
+#
+# The error-rate panels report % on a 0-100 scale, so absThreshold 1 is one
+# percentage point. Observed means sit near 0.2-0.5%, so this suppresses the
+# small absolute moves that would otherwise trip the 15% percentage threshold.
+#
+# The Dynatrace host entries match on panelTitle (perfana >= 0.2.95.37) rather than
+# panelId. Perfana generates a distinct panel id per host dashboard -- 28 dashboards,
+# 28 different ids for "CPU Usage" -- and those ids differ per deployment and change
+# as hosts are added, so a panelId here would be neither portable nor durable.
+# CPU Usage and Memory Usage carry no unit in ds_adapt_results but are percentages
+# on a 0-100 scale (observed 3.7-100 and 22.9-96.1), so absThreshold 5 is five
+# percentage points.
+items:
+  - dashboardUid: '^performance-test-metrics-'
+    regex: true
+    panelId: 101
+    panelTitle: Transaction RT Avg
+    metricClassification: RED_duration
+    higherIsBetter: false
+    absThreshold: 25
+  - dashboardUid: '^performance-test-metrics-'
+    regex: true
+    panelId: 201
+    panelTitle: Request RT Avg
+    metricClassification: RED_duration
+    higherIsBetter: false
+    absThreshold: 25
+  - dashboardUid: '^performance-test-metrics-'
+    regex: true
+    panelId: 105
+    panelTitle: Transaction Error Rate
+    metricClassification: RED_errors
+    higherIsBetter: false
+    absThreshold: 1
+  - dashboardUid: '^performance-test-metrics-'
+    regex: true
+    panelId: 205
+    panelTitle: Request Error Rate
+    metricClassification: RED_errors
+    higherIsBetter: false
+    absThreshold: 1
+
+  # --- Concurrency --------------------------------------------------------------
+  # Panel 108 is "Transaction Concurrency" only within this dashboard family; it is
+  # "HTTP connection pool route max default" on spring-boot-kubernetes-httpconpool-mimir,
+  # which the uid pattern excludes. Observed means are 0.11 (transactions) and 0.03
+  # (requests), so 0.1 is a coarse floor that will suppress most relative movement.
+  - dashboardUid: '^performance-test-metrics-'
+    regex: true
+    panelId: 108
+    panelTitle: Transaction Concurrency
+    metricClassification: RED_duration
+    higherIsBetter: false
+    absThreshold: 0.1
+  - dashboardUid: '^performance-test-metrics-'
+    regex: true
+    panelId: 219
+    panelTitle: Request Concurrency
+    metricClassification: RED_duration
+    higherIsBetter: false
+    absThreshold: 0.1
+
+  # --- Dynatrace hosts ----------------------------------------------------------
+  - dashboardUid: '^dynatrace-'
+    regex: true
+    panelTitle: CPU Usage
+    metricClassification: USE_utilization
+    higherIsBetter: false
+    absThreshold: 5
+  - dashboardUid: '^dynatrace-'
+    regex: true
+    panelTitle: Memory Usage
+    metricClassification: USE_utilization
+    higherIsBetter: false
+    absThreshold: 5

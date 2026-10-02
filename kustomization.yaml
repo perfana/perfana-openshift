@@ -1,0 +1,94 @@
+# Perfana on OpenShift — port of perfana-demo branch `poc-windows-wsl` (docker compose).
+# Apply with server-side apply (the dashboards ConfigMap is too big for the
+# client-side last-applied annotation):
+#   oc apply --server-side -k .
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: perfana
+
+resources:
+  - manifests/rbac.yaml
+  - manifests/postgres.yaml
+  - manifests/valkey.yaml
+  - manifests/keycloak.yaml
+  - manifests/perfana-api.yaml
+  - manifests/perfana-web.yaml
+  - manifests/perfana-worker.yaml
+  - manifests/perfana-grafana-sync.yaml
+  - manifests/perfana-report.yaml
+  - manifests/grafana.yaml
+  - manifests/routes.yaml
+
+# One place to bump the Perfana release.
+images:
+  - name: perfana/perfana-api
+    newTag: 0.2.96.27
+  - name: perfana/perfana-web
+    newTag: 0.2.96.27
+  - name: perfana/perfana-worker
+    newTag: 0.2.96.27
+  - name: perfana/perfana-grafana-sync
+    newTag: 0.2.96.27
+  - name: perfana/perfana-report
+    newTag: 0.2.96.27
+  - name: perfana/perfana-migration
+    newTag: 0.2.96.27
+
+configMapGenerator:
+  - name: perfana-params
+    envs: [params.env]
+  - name: postgres-init
+    files:
+      - config/database/init/01-create-keycloak-db.sql
+      - config/database/init/02-seed-migration-records.sql
+      - config/database/init/03-create-grafana-db.sql
+  - name: keycloak-realm
+    files: [config/keycloak/realms/perfana-realm.json]
+  - name: perfana-provisioning
+    files:
+      - config/perfana/provisioning/defaultDsCompareConfig.yaml
+      - config/perfana/provisioning/profile_benchmarks.yaml
+      - config/perfana/provisioning/profile_grafana_dashboards.yaml
+      - config/perfana/provisioning/profiles.yaml
+      - config/perfana/provisioning/template_ds_compare_configs.yaml
+  - name: grafana-ini
+    files: [config/grafana/grafana.ini]
+  - name: grafana-datasources
+    files: [config/grafana/provisioning/datasources/datasources.yaml]
+  - name: grafana-dashboard-providers
+    files: [config/grafana/provisioning/dashboards/dashboards.yaml]
+  - name: grafana-alerting
+    files:
+      - config/grafana/provisioning/alerting/contactpoints.yaml
+      - config/grafana/provisioning/alerting/policies.yaml
+  - name: grafana-dashboards
+    files:
+      - config/grafana/dashboards/template-postgres-health.json
+      - config/grafana/dashboards/template-timescaledb-errors.json
+      - config/grafana/dashboards/template-timescaledb-jmeter-aggregate.json
+      - config/grafana/dashboards/template-timescaledb-jmeter.json
+      - config/grafana/dashboards/template-timescaledb-request-analysis.json
+      - config/grafana/dashboards/template-timescaledb-transaction-analysis.json
+
+secretGenerator:
+  - name: perfana-secrets
+    envs: [secrets.env]   # cp secrets.env.example secrets.env (git-ignored)
+
+# Route hosts come from params.env so hostnames live in exactly one place.
+replacements:
+  - source: {kind: ConfigMap, name: perfana-params, fieldPath: data.PERFANA_HOST}
+    targets:
+      - select: {kind: Route, name: perfana-web}
+        fieldPaths: [spec.host]
+  - source: {kind: ConfigMap, name: perfana-params, fieldPath: data.API_HOST}
+    targets:
+      - select: {kind: Route, name: perfana-api}
+        fieldPaths: [spec.host]
+  - source: {kind: ConfigMap, name: perfana-params, fieldPath: data.KEYCLOAK_HOST}
+    targets:
+      - select: {kind: Route, name: keycloak}
+        fieldPaths: [spec.host]
+  - source: {kind: ConfigMap, name: perfana-params, fieldPath: data.GRAFANA_HOST}
+    targets:
+      - select: {kind: Route, name: grafana}
+        fieldPaths: [spec.host]

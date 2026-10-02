@@ -1,0 +1,59 @@
+# Next.js UI. Every URL here is what the browser uses.
+apiVersion: v1
+kind: Service
+metadata:
+  name: perfana-web
+spec:
+  selector: {app: perfana-web}
+  ports:
+    - {name: http, port: 3000}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: perfana-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: perfana-web}
+  template:
+    metadata:
+      labels: {app: perfana-web}
+    spec:
+      serviceAccountName: nonroot   # see rbac.yaml
+      securityContext:
+        runAsUser: 65532              # distroless "nonroot", owner of /app
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: perfana-web
+          image: perfana/perfana-web
+          envFrom:
+            - configMapRef: {name: perfana-params}
+          env:
+            - {name: NODE_ENV, value: production}
+            - {name: CSP_UPGRADE_INSECURE, value: "true"}
+            - {name: RUNTIME_API_URL, value: "https://$(API_HOST)/api"}
+            - {name: RUNTIME_KEYCLOAK_URL, value: "https://$(KEYCLOAK_HOST)"}
+            - {name: RUNTIME_KEYCLOAK_REALM, value: perfana-prod}
+            - {name: RUNTIME_KEYCLOAK_CLIENT_ID, value: perfana-web}
+            - {name: RUNTIME_USE_KEYCLOAK_AUTH, value: "true"}
+            - {name: NEXT_PUBLIC_API_URL, value: "https://$(API_HOST)/api"}
+            - {name: NEXT_PUBLIC_KEYCLOAK_URL, value: "https://$(KEYCLOAK_HOST)"}
+            - {name: NEXT_PUBLIC_KEYCLOAK_REALM, value: perfana-prod}
+            - {name: NEXT_PUBLIC_KEYCLOAK_CLIENT_ID, value: perfana-web}
+            - {name: NEXT_PUBLIC_USE_KEYCLOAK_AUTH, value: "true"}
+            - {name: NEXT_PUBLIC_CSP_FRAME_SRC, value: "https://$(GRAFANA_HOST) https://$(KEYCLOAK_HOST)"}
+            - {name: NEXT_PUBLIC_LOG_VIEWER_ENABLED, value: "false"}   # must match perfana-api
+            - {name: NEXT_PUBLIC_SUT_TRANSFER_ENABLED, value: "true"}  # must match perfana-api
+          ports:
+            - {name: http, containerPort: 3000}
+          readinessProbe:
+            tcpSocket: {port: 3000}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 500m, memory: 512Mi}
+            limits: {cpu: "2", memory: 2Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}

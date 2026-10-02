@@ -1,0 +1,37 @@
+# Keeps Grafana dashboards in sync with Perfana's templates.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: perfana-grafana-sync
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: perfana-grafana-sync}
+  template:
+    metadata:
+      labels: {app: perfana-grafana-sync}
+    spec:
+      containers:
+        - name: perfana-grafana-sync
+          image: perfana/perfana-grafana-sync
+          env:
+            - {name: NODE_ENV, value: production}
+            - {name: LOG_LEVEL, value: info}
+            - {name: PGAPPNAME, value: perfana-grafana-sync}
+            - {name: DB_HOST, value: postgres}
+            - {name: DB_PORT, value: "5432"}
+            - {name: DB_USERNAME, value: perfana}
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: perfana-secrets, key: POSTGRES_PASSWORD}}
+            - {name: DB_NAME, value: perfana}
+            - {name: DB_SSL, value: "false"}
+            - {name: GRAFANA_SYNC_ENABLED, value: "true"}
+            - {name: GRAFANA_SYNC_INTERVAL_MINUTES, value: "5"}
+            - {name: AUTO_CONFIG_ENABLED, value: "true"}
+            - {name: SANITY_CHECK_ENABLED, value: "true"}
+            - {name: USE_GRAFANA_DB_DIRECT_ACCESS, value: "false"}
+            - name: ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: perfana-secrets, key: ENCRYPTION_KEY}}
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi}

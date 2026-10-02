@@ -1,0 +1,8 @@
+organizationId: __ORG_ID__  # placeholder; rewritten by bootstrap.sh to the real org id
+items:
+  - _id: jmeter-profile
+    name: jmeter
+    description: Profile for Jmeter load test tool dashboards and metrics
+    tags:
+      - jmeter
+    readOnly: true

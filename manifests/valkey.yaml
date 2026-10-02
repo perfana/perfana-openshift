@@ -1,0 +1,44 @@
+# Valkey (Redis-compatible) — BullMQ job queue.
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey
+spec:
+  selector: {app: valkey}
+  ports:
+    - {name: redis, port: 6379}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: valkey
+spec:
+  serviceName: valkey
+  replicas: 1
+  selector:
+    matchLabels: {app: valkey}
+  template:
+    metadata:
+      labels: {app: valkey}
+    spec:
+      containers:
+        - name: valkey
+          image: valkey/valkey:8-alpine
+          command: [valkey-server, --appendonly, "yes", --dir, /data]
+          ports:
+            - {name: redis, containerPort: 6379}
+          readinessProbe:
+            exec: {command: [valkey-cli, ping]}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 5Gi}

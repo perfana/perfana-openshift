@@ -1,0 +1,100 @@
+# NestJS API. The TypeORM migrations run as an initContainer, so every rollout
+# (e.g. an image bump) migrates the schema before the new API starts — the
+# compose stack did this with a one-shot `perfana-migration` service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: perfana-api
+spec:
+  selector: {app: perfana-api}
+  ports:
+    - {name: http, port: 3001}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: perfana-api
+spec:
+  replicas: 1
+  strategy: {type: Recreate}   # single writer for migrations
+  selector:
+    matchLabels: {app: perfana-api}
+  template:
+    metadata:
+      labels: {app: perfana-api}
+    spec:
+      initContainers:
+        - name: migration
+          image: perfana/perfana-migration
+          env:
+            - {name: DB_HOST, value: postgres}
+            - {name: DB_PORT, value: "5432"}
+            - {name: DB_USERNAME, value: perfana}
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: perfana-secrets, key: POSTGRES_PASSWORD}}
+            - {name: DB_NAME, value: perfana}
+            - {name: DB_SSL, value: "false"}
+            - {name: PGAPPNAME, value: perfana-migration}
+      containers:
+        - name: perfana-api
+          image: perfana/perfana-api
+          envFrom:
+            - configMapRef: {name: perfana-params}
+          env:
+            - {name: NODE_ENV, value: production}
+            - {name: NODE_OPTIONS, value: "--max-old-space-size=3584"}
+            - {name: LOG_LEVEL, value: info}
+            - {name: HEALTH_HEAP_THRESHOLD_MB, value: "1500"}
+            - {name: HEALTH_RSS_THRESHOLD_MB, value: "3000"}
+            - {name: STALE_TIMEOUT_MINUTES, value: "15"}
+            - {name: PGAPPNAME, value: perfana-api}
+            - {name: DB_HOST, value: postgres}
+            - {name: DB_PORT, value: "5432"}
+            - {name: DB_USERNAME, value: perfana}
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: perfana-secrets, key: POSTGRES_PASSWORD}}
+            - {name: DB_NAME, value: perfana}
+            - {name: DB_SSL, value: "false"}
+            - {name: DB_ENABLE_RLS_ROLE, value: "true"}
+            - {name: DATABASE_URL, value: "postgresql://perfana:$(DB_PASSWORD)@postgres:5432/perfana?sslmode=disable"}
+            - {name: REDIS_HOST, value: valkey}
+            - {name: REDIS_PORT, value: "6379"}
+            - {name: REDIS_URL, value: "redis://valkey:6379"}
+            - {name: KEYCLOAK_URL, value: "http://keycloak:8080"}
+            - {name: KEYCLOAK_REALM, value: perfana-prod}
+            - {name: KEYCLOAK_CLIENT_ID, value: perfana-api}
+            - name: KEYCLOAK_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: perfana-secrets, key: KEYCLOAK_CLIENT_SECRET}}
+            - {name: KEYCLOAK_ADMIN_CLIENT_ID, value: perfana-admin}
+            - name: KEYCLOAK_ADMIN_CLIENT_SECRET
+              valueFrom: {secretKeyRef: {name: perfana-secrets, key: KEYCLOAK_ADMIN_CLIENT_SECRET}}
+            - {name: KEYCLOAK_ACCEPTED_ISSUERS, value: "http://keycloak:8080/realms/perfana-prod,https://$(KEYCLOAK_HOST)/realms/perfana-prod"}
+            - {name: KEYCLOAK_ACCEPTED_AUDIENCES, value: "perfana-api,perfana-web,account"}
+            - {name: FRONTEND_URL, value: "https://$(PERFANA_HOST)"}
+            - {name: CORS_ALLOWED_ORIGINS, value: "https://$(PERFANA_HOST)"}
+            - name: ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: perfana-secrets, key: ENCRYPTION_KEY}}
+            # ponytail: the admin log viewer reads the Docker Engine API; there is none on
+            # OpenShift. Off until perfana-api can read logs from the Kubernetes API.
+            - {name: LOG_VIEWER_ENABLED, value: "false"}
+            - {name: SUT_TRANSFER_ENABLED, value: "true"}
+          ports:
+            - {name: http, containerPort: 3001}
+          readinessProbe:
+            httpGet: {path: /api/health, port: 3001}
+            periodSeconds: 10
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: 3001}
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 500m, memory: 512Mi}
+            limits: {cpu: "2", memory: 4Gi}
+          volumeMounts:
+            - {name: provisioning, mountPath: /data/provisioning, readOnly: true}
+      volumes:
+        - name: provisioning
+          configMap: {name: perfana-provisioning}
