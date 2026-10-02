@@ -4,7 +4,8 @@
 # --------------------------------------------------------------------------------------------------
 # Run ONCE after `oc apply -k .` and all pods are Ready. Idempotent.
 #   1. Align Keycloak client secrets with secrets.env
-#   2. Point Keycloak redirect URIs / web origins / CSP at the Route hosts
+#   2. Point Keycloak redirect URIs / web origins / CSP at the Route hosts; disable
+#      self-registration, require HTTPS for external clients
 #   3. Set the Perfana admin password and enable password-grant login
 #   4. Create the Perfana organization and make the admin an org-admin
 #   5. Re-apply provisioning (benchmarks, dashboards) under that organization
@@ -66,8 +67,10 @@ web_uuid="$(client_uuid perfana-web)"
   -s "redirectUris=[\"$WEB_URL/*\"]" -s "webOrigins=[\"$WEB_URL\"]" -s directAccessGrantsEnabled=true >/dev/null 2>&1 \
   && echo "    - perfana-web client updated"
 csp="frame-src 'self' $GRAFANA_URL $WEB_URL; frame-ancestors 'self' $GRAFANA_URL $WEB_URL; object-src 'none';"
-"${KC[@]}" update "realms/$REALM" -s "browserSecurityHeaders.contentSecurityPolicy=$csp" >/dev/null 2>&1 \
-  && echo "    - realm CSP updated"
+# No self-registration; HTTPS required except from private addresses (in-cluster calls stay HTTP).
+"${KC[@]}" update "realms/$REALM" -s "browserSecurityHeaders.contentSecurityPolicy=$csp" \
+  -s registrationAllowed=false -s sslRequired=external >/dev/null 2>&1 \
+  && echo "    - realm CSP, registration off, sslRequired=external"
 
 # 3. Admin password; disable OTP in the direct-grant flow so password-grant works headless
 uid="$("${KC[@]}" get users -r "$REALM" -q "username=$PERFANA_USER" --fields id --format csv 2>/dev/null | tr -d '"\r' | head -1)"
