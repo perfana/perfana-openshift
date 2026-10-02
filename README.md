@@ -54,8 +54,7 @@ role), and creates a Perfana API key, which it prints once.
   `images:` as well. The database image is set in `manifests/postgres-cluster.yaml` (`imageName`).
 - An existing Grafana that both the browser and the perfana-worker / perfana-grafana-sync pods can
   reach. Its CSP and X-Frame settings must allow embedding (`allow_embedding = true`) from `PERFANA_HOST`.
-  The branch also installed the `marcusolsson-json-datasource` and `grafana-pyroscope-app` plugins;
-  add them there if you use them.
+  It must have the `grafana-pyroscope-app` plugin installed (e.g. `GF_PLUGINS_PREINSTALL_SYNC=grafana-pyroscope-app`).
 - A default StorageClass with RWO volumes, preferably SSD. Postgres is tuned for SSD
   (`random_page_cost=1.1`).
 - Postgres is sized for a ~20 GB node (`shared_buffers=4GB`, memory limit 12Gi). On a smaller
