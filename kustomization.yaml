@@ -44,6 +44,7 @@ configMapGenerator:
     files:
       - config/perfana/provisioning/defaultDsCompareConfig.yaml
       - config/perfana/provisioning/profile_benchmarks.yaml
+      - config/perfana/provisioning/profile_grafana_dashboards.yaml
       - config/perfana/provisioning/profiles.yaml
       - config/perfana/provisioning/template_ds_compare_configs.yaml
 

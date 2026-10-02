@@ -1,4 +1,3 @@
 organizationId: __ORG_ID__  # placeholder; rewritten by bootstrap.sh to the real org id
-# No default benchmarks ship for the jmeter profile. Define benchmarks per
-# system-under-test / workload from the Perfana UI, or add jmeter items here.
+# Format and examples: perfana-demo branch poc-windows-wsl, perfana/provisioning/profile_benchmarks.yaml
 items: []

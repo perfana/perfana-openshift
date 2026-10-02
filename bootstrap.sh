@@ -112,12 +112,13 @@ fi
 
 # 5. Provisioning under the real org id. The YAMLs are a ConfigMap; rewriting them and
 #    re-applying rolls perfana-api (new ConfigMap hash), the DB rows are fixed in place.
-for f in config/perfana/provisioning/{profiles,profile_benchmarks,template_ds_compare_configs}.yaml; do
+for f in config/perfana/provisioning/{profiles,profile_grafana_dashboards,profile_benchmarks,template_ds_compare_configs}.yaml; do
   sed -i.bak "s|^organizationId:.*|organizationId: ${ORG_ID}|" "$f" && rm -f "$f.bak"
 done
 "${PSQL[@]}" -c "
   UPDATE profiles                                SET organization_id='${ORG_ID}'::uuid WHERE organization_id<>'${ORG_ID}'::uuid;
   UPDATE profile_benchmarks                      SET organization_id='${ORG_ID}'::uuid WHERE organization_id<>'${ORG_ID}'::uuid;
+  UPDATE profile_grafana_dashboards              SET organization_id='${ORG_ID}'::uuid WHERE organization_id<>'${ORG_ID}'::uuid;
   UPDATE provisioned_template_ds_compare_configs SET organization_id='${ORG_ID}'::uuid WHERE organization_id<>'${ORG_ID}'::uuid;
 " >/dev/null && echo "    - provisioned rows reattached"
 oc apply -n "$NS" -k . >/dev/null   # new ConfigMap hash rolls perfana-api
