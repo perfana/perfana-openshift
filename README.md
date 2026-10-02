@@ -37,8 +37,10 @@ role), and creates a Perfana API key, which it prints once.
 - **cluster-admin, once**, to create `manifests/rbac.yaml`. It grants the `nonroot-v2` SCC to the
   `nonroot` service account, and two workloads need it to run as the UID built into their image:
   - postgres (uid 1000): initdb and pgdata expect that user.
-  - perfana-web (uid 65532): at startup it rewrites `__env.js` and the CSP in `routes-manifest.json`.
-    Under a random UID that write fails without an error, and the embedded Grafana panels stop loading.
+  - perfana-web (uid 65532): at startup it narrows the CSP in `routes-manifest.json` to your hosts.
+    Under a random UID that write fails, and the looser build-time CSP stays, which allows any
+    `https:` origin in `frame-src`/`connect-src`. The app still works, but the CSP is less strict.
+    The `ubi9/` images don't have this problem.
 
   Everything else runs under the default `restricted-v2` SCC.
 - Pulls from Docker Hub (`perfana/*`, `timescale`, `valkey`) and quay.io. If the cluster

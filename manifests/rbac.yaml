@@ -1,9 +1,11 @@
 # Two images must run as the uid baked into them, which restricted-v2 (random uid)
 # does not allow:
 #   postgres    timescaledb-ha initdb/pgdata expect uid 1000
-#   perfana-web start-server.js rewrites public/__env.js and the CSP in
-#               .next/routes-manifest.json at boot; those files are owned by 65532
-#               and the writes fail silently under a random uid (embedded Grafana breaks)
+#   perfana-web start-server.js narrows the CSP in .next/routes-manifest.json to the
+#               configured API/Keycloak/Grafana hosts at boot; the file is owned by
+#               65532, so under a random uid the write fails and the looser build-time
+#               CSP stays (frame-src/connect-src allow any https: origin). Works, but
+#               less hardened. Not needed with the ubi9/ images (group-0 writable).
 # nonroot-v2 permits any non-zero uid and nothing more. Granting it needs
 # cluster-admin (or "use" on that SCC).
 apiVersion: v1
