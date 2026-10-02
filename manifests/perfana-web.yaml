@@ -43,7 +43,7 @@ spec:
             - {name: NEXT_PUBLIC_KEYCLOAK_REALM, value: perfana-prod}
             - {name: NEXT_PUBLIC_KEYCLOAK_CLIENT_ID, value: perfana-web}
             - {name: NEXT_PUBLIC_USE_KEYCLOAK_AUTH, value: "true"}
-            - {name: NEXT_PUBLIC_CSP_FRAME_SRC, value: "https://$(GRAFANA_HOST) https://$(KEYCLOAK_HOST)"}
+            - {name: NEXT_PUBLIC_CSP_FRAME_SRC, value: "$(GRAFANA_URL) https://$(KEYCLOAK_HOST)"}
             - {name: NEXT_PUBLIC_LOG_VIEWER_ENABLED, value: "false"}   # must match perfana-api
             - {name: NEXT_PUBLIC_SUT_TRANSFER_ENABLED, value: "true"}  # must match perfana-api
           ports:

@@ -31,7 +31,6 @@ spec:
             - {name: REDIS_HOST, value: valkey}
             - {name: REDIS_PORT, value: "6379"}
             - {name: REDIS_URL, value: "redis://valkey:6379"}
-            - {name: GRAFANA_URL, value: "http://grafana:3000"}
             - {name: GRAFANA_CONCURRENCY, value: "30"}
             - {name: GRAFANA_BATCH_SIZE, value: "20"}
             - name: ENCRYPTION_KEY

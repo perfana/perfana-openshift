@@ -2,7 +2,8 @@
 
 Kustomize manifests to deploy Perfana on OpenShift 4.11+. They mirror the docker compose
 deployment in `perfana-demo` branch `poc-windows-wsl`: same images and tags, same tuning,
-same Keycloak realm, Grafana provisioning and bootstrap steps.
+same Keycloak realm and bootstrap steps. Grafana is not deployed: Perfana uses an existing
+Grafana (`GRAFANA_URL` in `params.env`).
 
 | Workload | Image | Exposed as |
 |---|---|---|
@@ -12,7 +13,6 @@ same Keycloak realm, Grafana provisioning and bootstrap steps.
 | `perfana-api` (+ `migration` initContainer) | perfana/perfana-api, perfana/perfana-migration | Route `API_HOST` |
 | `perfana-web` | perfana/perfana-web | Route `PERFANA_HOST` |
 | `perfana-worker`, `perfana-grafana-sync`, `perfana-report` | perfana/* | — |
-| `grafana` | grafana/grafana:12.4 | Route `GRAFANA_HOST` |
 
 All Routes use edge TLS with the cluster's router certificate.
 
@@ -20,16 +20,17 @@ All Routes use edge TLS with the cluster's router certificate.
 
 ```bash
 oc new-project perfana            # namespace is set in kustomization.yaml
-vi params.env                     # Route hostnames, proxy
+vi params.env                     # Route hostnames, GRAFANA_URL, proxy
 cp secrets.env.example secrets.env && vi secrets.env   # strong values, see comments
-oc apply --server-side -k .       # server-side: the dashboards ConfigMap exceeds the client-side annotation limit
+oc apply -k .
 oc get pods -w                    # wait until all are Ready (first Keycloak start takes a few minutes)
 ./bootstrap.sh                    # once; idempotent. CURL_OPTS=-k for a self-signed router cert
 ```
 
 `bootstrap.sh` runs locally and needs `oc`, `curl` and `jq`. It sets the Keycloak client secrets,
 redirect URIs and CSP for your hosts, sets the admin password, and creates the organization.
-It also registers Grafana and creates a Perfana API key, which it prints once.
+It registers your Grafana if `GRAFANA_API_TOKEN` is set (a service-account token with the Admin
+role), and creates a Perfana API key, which it prints once.
 
 ## Requirements
 
@@ -40,11 +41,13 @@ It also registers Grafana and creates a Perfana API key, which it prints once.
     Under a random UID that write fails without an error, and the embedded Grafana panels stop loading.
 
   Everything else runs under the default `restricted-v2` SCC.
-- Pulls from Docker Hub (`perfana/*`, `timescale`, `valkey`, `grafana`) and quay.io. If the cluster
+- Pulls from Docker Hub (`perfana/*`, `timescale`, `valkey`) and quay.io. If the cluster
   pulls through a mirror, override the images in `kustomization.yaml` (`images:`). If it needs a
   pull secret, link it with `oc secrets link default <secret> --for=pull`, and also for `nonroot`.
-- Grafana installs two plugins at startup (`GF_PLUGINS_PREINSTALL_SYNC`), so it needs outbound
-  access to grafana.com.
+- An existing Grafana that both the browser and the perfana-worker / perfana-grafana-sync pods can
+  reach. Its CSP and X-Frame settings must allow embedding (`allow_embedding = true`) from `PERFANA_HOST`.
+  The branch also installed the `marcusolsson-json-datasource` and `grafana-pyroscope-app` plugins;
+  add them there if you use them.
 - A default StorageClass with RWO volumes, preferably SSD. Postgres is tuned for SSD
   (`random_page_cost=1.1`).
 - Postgres is sized for a ~20 GB node (`shared_buffers=4GB`, memory limit 12Gi). On a smaller
@@ -52,11 +55,13 @@ It also registers Grafana and creates a Perfana API key, which it prints once.
 
 ## Upgrade
 
-Bump `newTag` under `images:` in `kustomization.yaml`, then run `oc apply --server-side -k .`.
+Bump `newTag` under `images:` in `kustomization.yaml`, then run `oc apply -k .`.
 The new perfana-api pod runs the migrations in its initContainer before it starts.
 
 ## Differences from poc-windows-wsl
 
+- Omitted: Grafana, its Keycloak SSO, its datasource/dashboard provisioning and its alert webhook
+  to Perfana. Configure those on your own Grafana if you need them; the files are in git history.
 - Omitted (they depend on Docker): docker-socket-proxy, the docker-monitor/valkey-monitor samplers
   and the "Docker resources" dashboard. `LOG_VIEWER_ENABLED=false` for the same reason.
 - Omitted: libredb (SQL IDE) and pgbouncer. Postgres is not exposed outside the cluster. If load
@@ -72,4 +77,4 @@ The new perfana-api pod runs the migrations in its initContainer before it start
 ## Backups
 
 `oc exec postgres-0 -- pg_dumpall -U perfana | gzip > perfana-$(date +%F).sql.gz`
-(all three databases: perfana, keycloak, grafana). Alternatively, take volume snapshots of `data-postgres-0`.
+(both databases: perfana, keycloak). Alternatively, take volume snapshots of `data-postgres-0`.

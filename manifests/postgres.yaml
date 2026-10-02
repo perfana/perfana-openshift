@@ -1,5 +1,5 @@
-# PostgreSQL + TimescaleDB. Holds the perfana, keycloak and grafana databases
-# (the latter two created by postgres-init on first boot). Tuning args copied from
+# PostgreSQL + TimescaleDB. Holds the perfana and keycloak databases
+# (keycloak created by postgres-init on first boot). Tuning args copied from
 # poc-windows-wsl docker-compose.yml, which documents why each one is set; they are
 # sized for a ~20 GB host — scale shared_buffers/effective_cache_size with the limits.
 apiVersion: v1

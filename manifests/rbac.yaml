@@ -3,7 +3,7 @@
 #   postgres    timescaledb-ha initdb/pgdata expect uid 1000
 #   perfana-web start-server.js rewrites public/__env.js and the CSP in
 #               .next/routes-manifest.json at boot; those files are owned by 65532
-#               and the writes fail silently under a random uid (Grafana iframes break)
+#               and the writes fail silently under a random uid (embedded Grafana breaks)
 # nonroot-v2 permits any non-zero uid and nothing more. Granting it needs
 # cluster-admin (or "use" on that SCC).
 apiVersion: v1

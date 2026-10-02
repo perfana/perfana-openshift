@@ -2,17 +2,16 @@
 # ==================================================================================================
 # Perfana on OpenShift - first-run bootstrap (port of poc-windows-wsl bootstrap.sh)
 # --------------------------------------------------------------------------------------------------
-# Run ONCE after `oc apply --server-side -k .` and all pods are Ready. Idempotent.
+# Run ONCE after `oc apply -k .` and all pods are Ready. Idempotent.
 #   1. Align Keycloak client secrets with secrets.env
 #   2. Point Keycloak redirect URIs / web origins / CSP at the Route hosts
 #   3. Set the Perfana admin password and enable password-grant login
 #   4. Create the Perfana organization and make the admin an org-admin
 #   5. Re-apply provisioning (benchmarks, dashboards) under that organization
-#   6. Create a Grafana service-account token and register Grafana in Perfana
+#   6. Register the existing Grafana in Perfana
 #   7. Create a Perfana API key for load-test result submission
-#   8. Install database self-monitoring (feeds the "PostgreSQL health" dashboard)
 #
-# Requires: oc (logged in), curl, jq. Talks to Perfana/Grafana/Keycloak over the Routes.
+# Requires: oc (logged in), curl, jq. Talks to Perfana/Keycloak over the Routes.
 # Self-signed router certificate?  CURL_OPTS=-k ./bootstrap.sh
 # ==================================================================================================
 set -uo pipefail
@@ -31,7 +30,6 @@ PERFANA_PW="${PERFANA_ADMIN_PASSWORD:?PERFANA_ADMIN_PASSWORD must be set}"
 WEB_URL="https://$PERFANA_HOST"
 API_URL="https://$API_HOST"
 KC_URL="https://$KEYCLOAK_HOST"
-GRAFANA_URL="https://$GRAFANA_HOST"
 CURL=(curl -s ${CURL_OPTS:-})
 # kcadm keeps its session in $HOME; the random OpenShift uid has no writable home.
 KC=("${OC[@]}" exec deploy/keycloak -- env HOME=/tmp /opt/keycloak/bin/kcadm.sh)
@@ -54,8 +52,7 @@ echo "==> Configuring Keycloak (realm: $REALM)"
   || { echo "ERROR: kcadm login failed. Is Keycloak ready?" >&2; exit 1; }
 
 # 1. Client secrets
-for pair in "perfana-api:${KEYCLOAK_CLIENT_SECRET:-}" "perfana-admin:${KEYCLOAK_ADMIN_CLIENT_SECRET:-}" \
-            "grafana:${GRAFANA_OAUTH_CLIENT_SECRET:-}"; do
+for pair in "perfana-api:${KEYCLOAK_CLIENT_SECRET:-}" "perfana-admin:${KEYCLOAK_ADMIN_CLIENT_SECRET:-}"; do
   cid="${pair%%:*}"; secret="${pair#*:}"
   [[ -z "$secret" ]] && continue
   uuid="$(client_uuid "$cid")"
@@ -68,10 +65,6 @@ web_uuid="$(client_uuid perfana-web)"
 [[ -n "$web_uuid" ]] && "${KC[@]}" update "clients/$web_uuid" -r "$REALM" \
   -s "redirectUris=[\"$WEB_URL/*\"]" -s "webOrigins=[\"$WEB_URL\"]" -s directAccessGrantsEnabled=true >/dev/null 2>&1 \
   && echo "    - perfana-web client updated"
-graf_uuid="$(client_uuid grafana)"
-[[ -n "$graf_uuid" ]] && "${KC[@]}" update "clients/$graf_uuid" -r "$REALM" \
-  -s "redirectUris=[\"$GRAFANA_URL/*\"]" -s "webOrigins=[\"$GRAFANA_URL\"]" >/dev/null 2>&1 \
-  && echo "    - grafana client updated"
 csp="frame-src 'self' $GRAFANA_URL $WEB_URL; frame-ancestors 'self' $GRAFANA_URL $WEB_URL; object-src 'none';"
 "${KC[@]}" update "realms/$REALM" -s "browserSecurityHeaders.contentSecurityPolicy=$csp" >/dev/null 2>&1 \
   && echo "    - realm CSP updated"
@@ -93,7 +86,6 @@ fi
 
 echo "==> Waiting for services"
 wait_for "$API_URL/api/health" "Perfana API" 60
-wait_for "$GRAFANA_URL/api/health" "Grafana" 30
 
 get_token() {
   "${CURL[@]}" "$KC_URL/realms/$REALM/protocol/openid-connect/token" \
@@ -129,41 +121,31 @@ done
   UPDATE profile_grafana_dashboards              SET organization_id='${ORG_ID}'::uuid WHERE organization_id<>'${ORG_ID}'::uuid;
   UPDATE provisioned_template_ds_compare_configs SET organization_id='${ORG_ID}'::uuid WHERE organization_id<>'${ORG_ID}'::uuid;
 " >/dev/null && echo "    - provisioned rows reattached"
-oc apply -n "$NS" --server-side -k . >/dev/null   # new ConfigMap hash rolls perfana-api
+oc apply -n "$NS" -k . >/dev/null   # new ConfigMap hash rolls perfana-api
 "${OC[@]}" rollout status deploy/perfana-api --timeout=5m
 TOKEN="$(get_token)"   # refresh: token now carries org membership
 
-# 6. Grafana service account + register the instance in Perfana
-GAUTH=(-u "${GRAFANA_ADMIN_USER:-perfana}:$GRAFANA_ADMIN_PASSWORD" -H 'Content-Type: application/json')
-sa_id="$("${CURL[@]}" -X POST "$GRAFANA_URL/api/serviceaccounts" "${GAUTH[@]}" -d '{"name":"perfana","role":"Admin"}' | jq -r '.id // empty')"
-[[ -z "$sa_id" ]] && sa_id="$("${CURL[@]}" "$GRAFANA_URL/api/serviceaccounts/search" "${GAUTH[@]}" | jq -r '.serviceAccounts[]? | select(.name=="perfana") | .id' | head -1)"
-GRAFANA_TOKEN=""
-[[ -n "$sa_id" ]] && GRAFANA_TOKEN="$("${CURL[@]}" -X POST "$GRAFANA_URL/api/serviceaccounts/$sa_id/tokens" "${GAUTH[@]}" \
-  -d "{\"name\":\"perfana-$(date +%s)\"}" | jq -r '.key // empty')"
-[[ -n "$GRAFANA_TOKEN" ]] && echo "    - Grafana token created" || echo "    - WARNING: no Grafana token"
-
+# 6. Register the existing Grafana (GRAFANA_URL + GRAFANA_API_TOKEN) in Perfana
 existing="$(api "$API_URL/api/grafana-instances" | jq -r '.[0].id // empty')"
-if [[ -z "$existing" ]]; then
+if [[ -z "${GRAFANA_API_TOKEN:-}" ]]; then
+  echo "    - GRAFANA_API_TOKEN empty: register Grafana from the Perfana UI"
+elif [[ -z "$existing" ]]; then
   api -X POST "$API_URL/api/grafana-instances" -d "{\"label\":\"Grafana\",\"clientUrl\":\"$GRAFANA_URL\",
-    \"serverUrl\":\"http://grafana:3000\",\"orgId\":\"1\",\"apiKey\":\"$GRAFANA_TOKEN\",\"organizationId\":\"$ORG_ID\"}" >/dev/null \
+    \"serverUrl\":\"$GRAFANA_URL\",\"orgId\":\"1\",\"apiKey\":\"$GRAFANA_API_TOKEN\",\"organizationId\":\"$ORG_ID\"}" >/dev/null \
     && echo "    - Grafana registered in Perfana"
-elif [[ -n "$GRAFANA_TOKEN" ]]; then
-  api -X PATCH "$API_URL/api/grafana-instances/$existing" -d "{\"apiKey\":\"$GRAFANA_TOKEN\"}" >/dev/null \
+else
+  api -X PATCH "$API_URL/api/grafana-instances/$existing" -d "{\"apiKey\":\"$GRAFANA_API_TOKEN\"}" >/dev/null \
     && echo "    - Grafana instance key updated"
 fi
 
 # 7. API key for load generators
 API_KEY="$(api "$API_URL/api/api-keys" -d '{"ttl":"1y","description":"default"}' | jq -r '.token // empty')"
 
-# 8. Database self-monitoring (idempotent)
-"${PSQL[@]}" < config/monitoring/pg-monitoring.sql >/dev/null && echo "    - database monitoring installed"
-
 cat <<EOF
 
 ==================================================================
  Bootstrap complete.
    Perfana UI : $WEB_URL   (login: $PERFANA_USER)
-   Grafana    : $GRAFANA_URL
    Keycloak   : $KC_URL
 ${API_KEY:+
    Perfana API key (store securely - shown once):
