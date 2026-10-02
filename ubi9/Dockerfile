@@ -9,6 +9,7 @@
 #
 # /app is group-0 owned and group-writable (OpenShift convention), so every image runs
 # under restricted-v2 with a random uid — no nonroot-v2 SCC needed for perfana-web.
+# HEALTHCHECKs mirror the upstream images (docker/compose only; OpenShift uses probes).
 #
 #   ./build.sh <registry>/perfana            (see README.md)
 # ==================================================================================================
@@ -34,19 +35,27 @@ USER 1001
 FROM base AS api
 ENV PORT=3001
 EXPOSE 3001
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ["node", "-e", "require('http').get('http://localhost:3001/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
 CMD ["node", "apps/api/dist/main.js"]
 
 FROM base AS web
 ENV PORT=3000 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ["node", "-e", "require('http').get('http://localhost:3000/', (r) => process.exit(r.statusCode === 200 || r.statusCode === 307 ? 0 : 1)).on('error', () => process.exit(1))"]
 WORKDIR /app/apps/web
 CMD ["node", "scripts/start-server.js"]
 
 FROM base AS worker
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ["node", "-e", "process.exit(0)"]
 CMD ["node", "apps/worker/dist/worker.js"]
 
 FROM base AS grafana-sync
 ENV PORT=3002
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ["node", "-e", "process.exit(0)"]
 CMD ["node", "apps/grafana-sync/dist/src/main.js"]
 
 # EPEL chromium needs pipewire/double-conversion, which are in RHEL but not UBI repos, so
@@ -66,6 +75,8 @@ RUN microdnf install -y --setopt=install_weak_deps=0 unzip \
 USER 1001
 ENV PORT=3003 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 EXPOSE 3003
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD ["node", "-e", "require('http').get('http://localhost:3003/health/live', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
 CMD ["node", "apps/perfana-report/dist/src/main.js"]
 
 FROM ${UBI_NODE} AS migration

@@ -1,6 +1,7 @@
 # PostgreSQL + TimescaleDB. Holds the perfana and keycloak databases
 # (keycloak created by postgres-init on first boot). Tuning args copied from
 # poc-windows-wsl docker-compose.yml, which documents why each one is set; they are
+# PG18 because TimescaleDB 2.29+ dropped PG15 (same image line as perfana-demo main).
 # sized for a ~20 GB host — scale shared_buffers/effective_cache_size with the limits.
 apiVersion: v1
 kind: Service
@@ -33,7 +34,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: postgres
-          image: timescale/timescaledb-ha:pg15
+          image: timescale/timescaledb-ha:pg18.6-ts2.30.2
           args:
             - -c
             - max_connections=500

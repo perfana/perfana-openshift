@@ -7,7 +7,7 @@ Grafana (`GRAFANA_URL` in `params.env`).
 
 | Workload | Image | Exposed as |
 |---|---|---|
-| `postgres` (StatefulSet, 200Gi) | timescale/timescaledb-ha:pg15 | Service only |
+| `postgres` (StatefulSet, 200Gi) | timescale/timescaledb-ha:pg18.6-ts2.30.2 | Service only |
 | `valkey` (StatefulSet, 5Gi) | valkey/valkey:8-alpine | Service only |
 | `keycloak` | quay.io/keycloak/keycloak:24.0 | Route `KEYCLOAK_HOST` |
 | `perfana-api` (+ `migration` initContainer) | perfana/perfana-api, perfana/perfana-migration | Route `API_HOST` |
