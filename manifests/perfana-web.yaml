@@ -20,11 +20,6 @@ spec:
     metadata:
       labels: {app: perfana-web}
     spec:
-      serviceAccountName: nonroot   # see rbac.yaml
-      securityContext:
-        runAsUser: 65532              # distroless "nonroot", owner of /app
-        runAsNonRoot: true
-        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: perfana-web
           image: perfana/perfana-web

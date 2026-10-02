@@ -1,13 +1,7 @@
-# Two images must run as the uid baked into them, which restricted-v2 (random uid)
-# does not allow:
-#   postgres    timescaledb-ha initdb/pgdata expect uid 1000
-#   perfana-web start-server.js narrows the CSP in .next/routes-manifest.json to the
-#               configured API/Keycloak/Grafana hosts at boot; the file is owned by
-#               65532, so under a random uid the write fails and the looser build-time
-#               CSP stays (frame-src/connect-src allow any https: origin). Works, but
-#               less hardened. Not needed with the ubi9/ images (group-0 writable).
-# nonroot-v2 permits any non-zero uid and nothing more. Granting it needs
-# cluster-admin (or "use" on that SCC).
+# timescaledb-ha must run as its built-in postgres user (uid 1000): initdb refuses an
+# arbitrary uid ("could not look up effective user ID"), which restricted-v2 assigns.
+# nonroot-v2 permits any non-zero uid and nothing more. Granting it needs cluster-admin
+# (or "use" on that SCC). The Perfana images (ubi9/) run under restricted-v2.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

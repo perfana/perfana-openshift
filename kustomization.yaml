@@ -16,20 +16,27 @@ resources:
   - manifests/perfana-report.yaml
   - manifests/routes.yaml
 
-# One place to bump the Perfana release.
+# UBI9 builds of the Perfana release (ubi9/), pushed to the OpenShift internal registry in
+# this namespace (see ubi9/README.md). One place to bump the release or change registry.
 images:
   - name: perfana/perfana-api
-    newTag: 0.2.96.27
+    newName: image-registry.openshift-image-registry.svc:5000/perfana/perfana-api
+    newTag: 0.2.96.27-ubi9
   - name: perfana/perfana-web
-    newTag: 0.2.96.27
+    newName: image-registry.openshift-image-registry.svc:5000/perfana/perfana-web
+    newTag: 0.2.96.27-ubi9
   - name: perfana/perfana-worker
-    newTag: 0.2.96.27
+    newName: image-registry.openshift-image-registry.svc:5000/perfana/perfana-worker
+    newTag: 0.2.96.27-ubi9
   - name: perfana/perfana-grafana-sync
-    newTag: 0.2.96.27
+    newName: image-registry.openshift-image-registry.svc:5000/perfana/perfana-grafana-sync
+    newTag: 0.2.96.27-ubi9
   - name: perfana/perfana-report
-    newTag: 0.2.96.27
+    newName: image-registry.openshift-image-registry.svc:5000/perfana/perfana-report
+    newTag: 0.2.96.27-ubi9
   - name: perfana/perfana-migration
-    newTag: 0.2.96.27
+    newName: image-registry.openshift-image-registry.svc:5000/perfana/perfana-migration
+    newTag: 0.2.96.27-ubi9
 
 configMapGenerator:
   - name: perfana-params

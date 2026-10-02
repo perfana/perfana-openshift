@@ -12,18 +12,14 @@ NO_PUSH=1 ./build.sh local/perfana                 # build only
 
 The build produces `<repo>/perfana-{api,web,worker,grafana-sync,report,migration}:<version>-ubi9`.
 
-To deploy them, point the `images:` entries in `../kustomization.yaml` at your registry:
-
-```yaml
-  - name: perfana/perfana-api
-    newName: registry.example.com/perfana/perfana-api
-    newTag: 0.2.96.27-ubi9
-```
+`../kustomization.yaml` deploys them from the OpenShift internal registry
+(`image-registry.openshift-image-registry.svc:5000/perfana/...`). Push there with
+`./build.sh "$(oc registry info --public)/perfana"` after `oc registry login`, or change `newName`
+in `../kustomization.yaml` to use another registry.
 
 Notes
 - `/app` belongs to group 0 and is group-writable, so every image runs under the default
-  `restricted-v2` SCC with a random UID. perfana-web no longer needs the `nonroot-v2` SCC; only
-  postgres still does.
+  `restricted-v2` SCC with a random UID.
 - **perfana-report**: EPEL's Chromium needs libraries (pipewire, double-conversion) that are only in
   the subscription RHEL repos, so the report image uses Google's Chrome for Testing
   `chrome-headless-shell` instead. All of its runtime libraries come from the UBI repos. The version
