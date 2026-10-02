@@ -1,0 +1,79 @@
+# PostgreSQL 18 + TimescaleDB + Toolkit, run by the CloudNativePG operator (install it first,
+# see README). Image: ubi9/Containerfile.cnpg (UBI9, uid 26).
+#
+# CNPG creates:
+#   Service perfana-db-rw     primary, what every Perfana component connects to
+#   Secret  perfana-db-app    username/password for "perfana" (random, generated once)
+#   SA      perfana-db        bound to the nonroot-v2 SCC in rbac.yaml
+#
+# Tuning copied from poc-windows-wsl docker-compose.yml, which documents why each is set; sized
+# for a ~20 GB node — scale shared_buffers/effective_cache_size together with the limits.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: perfana-db
+spec:
+  instances: 1   # ponytail: single instance like the compose stack; 3 for HA failover
+  imageName: image-registry.openshift-image-registry.svc:5000/perfana/cnpg-timescaledb:18-ts2.30.2
+  primaryUpdateStrategy: unsupervised
+
+  bootstrap:
+    initdb:
+      database: perfana
+      owner: perfana
+      postInitSQL:
+        - CREATE DATABASE keycloak OWNER perfana
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS timescaledb
+        - CREATE EXTENSION IF NOT EXISTS timescaledb_toolkit
+        - CREATE EXTENSION IF NOT EXISTS "uuid-ossp"
+        # The migration image runs every pending migration in one transaction; on a fresh
+        # schema AddTagsHashUniqueIndex re-creates an index ConsolidatedSchema already made
+        # and rolls the lot back. Mark it applied (was database/init/02-seed-migration-records.sql).
+        - CREATE TABLE IF NOT EXISTS typeorm_migrations (id SERIAL PRIMARY KEY, "timestamp" BIGINT NOT NULL, name VARCHAR NOT NULL)
+        - INSERT INTO typeorm_migrations ("timestamp", name) VALUES (1700000000003, 'AddTagsHashUniqueIndex1700000000003')
+        - ALTER TABLE typeorm_migrations OWNER TO perfana
+
+  # perfana is a superuser, as POSTGRES_USER is in the compose stack: migrations create
+  # extensions and the perfana_app/perfana_system RLS roles, and the API reads FORCE-RLS
+  # tables (api_keys) through the plain pool, which a non-bypassrls role would see empty.
+  managed:
+    roles:
+      - name: perfana
+        ensure: present
+        login: true
+        superuser: true
+        passwordSecret: {name: perfana-db-app}
+
+  postgresql:
+    shared_preload_libraries: [timescaledb, pg_stat_statements]
+    parameters:
+      max_connections: "500"
+      max_worker_processes: "32"
+      max_locks_per_transaction: "256"
+      client_connection_check_interval: "10000"
+      log_lock_waits: "on"
+      deadlock_timeout: 1s
+      shared_buffers: 4GB
+      effective_cache_size: 12GB
+      work_mem: 32MB
+      maintenance_work_mem: 1GB
+      max_wal_size: 8GB
+      bgwriter_delay: 50ms
+      bgwriter_lru_maxpages: "1000"
+      bgwriter_lru_multiplier: "4.0"
+      autovacuum_max_workers: "6"
+      autovacuum_vacuum_cost_limit: "2000"
+      random_page_cost: "1.1"
+      effective_io_concurrency: "200"
+      log_min_duration_statement: "1000"
+      timescaledb.telemetry_level: "off"
+
+  storage:
+    size: 200Gi
+  # Parallel query needs more than the default 64 MB /dev/shm.
+  ephemeralVolumesSizeLimit:
+    shm: 1Gi
+  resources:
+    requests: {cpu: "1", memory: 6Gi}
+    limits: {memory: 12Gi}

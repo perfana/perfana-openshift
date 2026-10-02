@@ -10,7 +10,10 @@ and the application code is identical to upstream.
 NO_PUSH=1 ./build.sh local/perfana                 # build only
 ```
 
-The build produces `<repo>/perfana-{api,web,worker,grafana-sync,report,migration}:<version>-ubi9`.
+The build produces `<repo>/perfana-{api,web,worker,grafana-sync,report,migration}:<version>-ubi9`,
+plus the database image `<repo>/cnpg-timescaledb:18-ts2.30.2` from `Containerfile.cnpg`. That image is the
+CloudNativePG operand: UBI9, PostgreSQL 18.6 (PGDG), TimescaleDB 2.30.2, Toolkit, uuid-ossp, uid 26.
+By default it builds the `openshift-perms` target without barman; `CNPG_TARGET=system` adds barman-cloud.
 
 `../kustomization.yaml` deploys them from the OpenShift internal registry
 (`image-registry.openshift-image-registry.svc:5000/perfana/...`). Push there with

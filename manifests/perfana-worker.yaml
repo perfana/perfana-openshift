@@ -20,14 +20,14 @@ spec:
             - {name: NODE_ENV, value: production}
             - {name: LOG_LEVEL, value: info}
             - {name: PGAPPNAME, value: perfana-worker}
-            - {name: DB_HOST, value: postgres}
+            - {name: DB_HOST, value: perfana-db-rw}
             - {name: DB_PORT, value: "5432"}
             - {name: DB_USERNAME, value: perfana}
             - name: DB_PASSWORD
-              valueFrom: {secretKeyRef: {name: perfana-secrets, key: POSTGRES_PASSWORD}}
+              valueFrom: {secretKeyRef: {name: perfana-db-app, key: password}}
             - {name: DB_NAME, value: perfana}
             - {name: DB_SSL, value: "false"}
-            - {name: DATABASE_URL, value: "postgresql://perfana:$(DB_PASSWORD)@postgres:5432/perfana?sslmode=disable"}
+            - {name: DATABASE_URL, value: "postgresql://perfana:$(DB_PASSWORD)@perfana-db-rw:5432/perfana?sslmode=disable"}
             - {name: REDIS_HOST, value: valkey}
             - {name: REDIS_PORT, value: "6379"}
             - {name: REDIS_URL, value: "redis://valkey:6379"}

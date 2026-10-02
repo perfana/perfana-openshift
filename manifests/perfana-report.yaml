@@ -19,11 +19,11 @@ spec:
             - {name: PORT, value: "3003"}
             - {name: LOG_LEVEL, value: info}
             - {name: PGAPPNAME, value: perfana-report}
-            - {name: DB_HOST, value: postgres}
+            - {name: DB_HOST, value: perfana-db-rw}
             - {name: DB_PORT, value: "5432"}
             - {name: DB_USERNAME, value: perfana}
             - name: DB_PASSWORD
-              valueFrom: {secretKeyRef: {name: perfana-secrets, key: POSTGRES_PASSWORD}}
+              valueFrom: {secretKeyRef: {name: perfana-db-app, key: password}}
             - {name: DB_NAME, value: perfana}
             - {name: DB_SSL, value: "false"}
             - {name: REDIS_HOST, value: valkey}

@@ -6,7 +6,7 @@ namespace: perfana
 
 resources:
   - manifests/rbac.yaml
-  - manifests/postgres.yaml
+  - manifests/postgres-cluster.yaml
   - manifests/valkey.yaml
   - manifests/keycloak.yaml
   - manifests/perfana-api.yaml
@@ -41,10 +41,6 @@ images:
 configMapGenerator:
   - name: perfana-params
     envs: [params.env]
-  - name: postgres-init
-    files:
-      - config/database/init/01-create-keycloak-db.sql
-      - config/database/init/02-seed-migration-records.sql
   - name: keycloak-realm
     files: [config/keycloak/realms/perfana-realm.json]
   - name: perfana-provisioning

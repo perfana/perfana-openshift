@@ -30,10 +30,10 @@ spec:
             - configMapRef: {name: perfana-params}
           env:
             - {name: KC_DB, value: postgres}
-            - {name: KC_DB_URL, value: "jdbc:postgresql://postgres:5432/keycloak"}
+            - {name: KC_DB_URL, value: "jdbc:postgresql://perfana-db-rw:5432/keycloak"}
             - {name: KC_DB_USERNAME, value: perfana}
             - name: KC_DB_PASSWORD
-              valueFrom: {secretKeyRef: {name: perfana-secrets, key: POSTGRES_PASSWORD}}
+              valueFrom: {secretKeyRef: {name: perfana-db-app, key: password}}
             - {name: KC_DB_SCHEMA, value: public}
             - {name: KC_DB_POOL_INITIAL_SIZE, value: "5"}
             - {name: KC_DB_POOL_MIN_SIZE, value: "5"}

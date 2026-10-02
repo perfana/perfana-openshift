@@ -1,20 +1,15 @@
-# timescaledb-ha must run as its built-in postgres user (uid 1000): initdb refuses an
-# arbitrary uid ("could not look up effective user ID"), which restricted-v2 assigns.
-# nonroot-v2 permits any non-zero uid and nothing more. Granting it needs cluster-admin
-# (or "use" on that SCC). The Perfana images (ubi9/) run under restricted-v2.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: nonroot
----
+# The CNPG operand image runs as uid 26; initdb refuses the random uid restricted-v2 assigns
+# ("could not look up effective user ID ... user does not exist"). nonroot-v2 permits any
+# non-zero uid and nothing more. The ServiceAccount is created by CNPG (named after the
+# Cluster). Granting this needs cluster-admin (or "use" on that SCC).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: nonroot-scc-nonroot-v2
+  name: perfana-db-scc-nonroot-v2
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: system:openshift:scc:nonroot-v2
 subjects:
   - kind: ServiceAccount
-    name: nonroot
+    name: perfana-db

@@ -1,0 +1,164 @@
+# ==============================================================================================
+# CloudNativePG operand image for Perfana — UBI 9 / PostgreSQL 18 / TimescaleDB + Toolkit
+# (from perfana-demo deploy/openshift/Containerfile.ubi9; USER 26 moved up into openshift-perms
+#  so that target is usable on its own — ../build.sh builds it)
+# ==============================================================================================
+# Mirrors the contract of cloudnative-pg/postgres-containers (same stage names, same UID 26,
+# same "no ENTRYPOINT" — the operator injects its instance manager), but on a Red Hat base so
+# it passes a RHEL estate's image policy.
+#
+# OPENSHIFT, READ THIS FIRST. This image runs as UID 26 and REQUIRES an SCC that permits a
+# specific non-root UID — `nonroot-v2`, or your own. It does NOT work under the default
+# `restricted-v2`, and no amount of file permissions will fix that: `restricted-v2` assigns an
+# arbitrary UID with no /etc/passwd entry, and initdb then refuses outright with
+#     initdb: could not look up effective user ID 1000670000: user does not exist
+# (measured, not assumed). Bind the SCC to the CNPG service account:
+#     oc adm policy add-scc-to-user nonroot-v2 -z <cluster-sa> -n <namespace>
+# If your platform team will not grant that, the escape hatch is nss_wrapper: an initContainer
+# writes a passwd file containing the injected UID into a shared emptyDir, and the cluster sets
+# LD_PRELOAD=/usr/lib64/libnss_wrapper.so plus NSS_WRAPPER_PASSWD/NSS_WRAPPER_GROUP via
+# `spec.env`. Prefer the SCC; it is how CNPG is normally deployed on OpenShift.
+#
+# Perfana requires, and this image provides:
+#   timescaledb           hypertables, continuous aggregates, columnar compression
+#   timescaledb_toolkit   percentile_agg / approx_percentile / rollup / tdigest / uddsketch
+#   uuid-ossp             uuid_generate_v4() column defaults   (ships in postgresqlNN-contrib)
+# Community edition is mandatory: compression and continuous aggregates are TSL-only, so the
+# `-oss` / Apache builds cannot run Perfana.
+#
+# Build:
+#   podman build --platform linux/amd64 -f Containerfile.ubi9 \
+#     --build-arg PG_MAJOR=18 --build-arg TS_VERSION=2.30.2 \
+#     --target system -t registry.example.com/perfana/cnpg-timescaledb:18-ts2.30.2 .
+#
+# Targets, smallest first (same names CNPG uses):
+#   minimal  PostgreSQL only
+#   standard + locales + TimescaleDB + Toolkit   <- what Perfana needs
+#   system   + barman-cloud, for CNPG's in-tree (deprecated) backups. Skip it if you use the
+#            Barman Cloud Plugin sidecar, which is the supported path from CNPG 1.26 on.
+# ==============================================================================================
+
+ARG UBI_TAG=9.6
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_TAG} AS minimal
+
+ARG PG_MAJOR=18
+# PGDG installs under /usr/pgsql-NN on EL, not /usr/lib/postgresql/NN as on Debian.
+ENV PGDG_HOME=/usr/pgsql-${PG_MAJOR}
+ENV PATH=${PGDG_HOME}/bin:$PATH
+
+RUN set -eux; \
+    dnf -y upgrade --refresh; \
+    dnf -y install \
+      https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-$(uname -m)/pgdg-redhat-repo-latest.noarch.rpm; \
+    # RHEL ships its own postgresql module, which shadows the PGDG packages.
+    dnf -qy module disable postgresql || true; \
+    dnf -y install --setopt=install_weak_deps=0 \
+      postgresql${PG_MAJOR}-server \
+      postgresql${PG_MAJOR}-contrib \
+      glibc-langpack-en \
+      openssl \
+      ca-certificates; \
+    dnf -y clean all; \
+    rm -rf /var/cache/dnf /var/log/dnf*; \
+    # CNPG runs the instance as UID 26. PGDG's postgres user is 26 on EL already, but pin it
+    # so the image does not drift if the package ever changes.
+    usermod -u 26 postgres 2>/dev/null || true; \
+    # PGDG creates no cluster on EL (no postgresql-common), so there is nothing to disable.
+    test -x ${PGDG_HOME}/bin/postgres
+
+# ----------------------------------------------------------------------------------------------
+FROM minimal AS standard
+
+ARG PG_MAJOR=18
+# Pin both. The toolkit lags core TimescaleDB on a new PG major, so "latest" of each is not
+# necessarily a pair that exists.
+ARG TS_VERSION=2.30.2
+ARG TS_TOOLKIT_VERSION=
+
+# printf, not a heredoc: RUN heredocs need a `# syntax=docker/dockerfile:1.4` directive and
+# are not portable to every podman/buildah version a client might build with.
+RUN printf '%s\n' \
+      '[timescale_timescaledb]' \
+      'name=timescale_timescaledb' \
+      'baseurl=https://packagecloud.io/timescale/timescaledb/el/9/$basearch' \
+      'repo_gpgcheck=1' \
+      'gpgcheck=0' \
+      'enabled=1' \
+      'gpgkey=https://packagecloud.io/timescale/timescaledb/gpgkey' \
+      'sslverify=1' \
+      'sslcacert=/etc/pki/tls/certs/ca-bundle.crt' \
+      'metadata_expire=300' \
+    > /etc/yum.repos.d/timescale_timescaledb.repo
+
+RUN set -eux; \
+    dnf -y install --setopt=install_weak_deps=0 \
+      timescaledb-2-postgresql-${PG_MAJOR}-${TS_VERSION}* \
+      timescaledb-2-loader-postgresql-${PG_MAJOR}-${TS_VERSION}* \
+      $( [ -n "${TS_TOOLKIT_VERSION}" ] \
+           && echo "timescaledb-toolkit-postgresql-${PG_MAJOR}-${TS_TOOLKIT_VERSION}*" \
+           || echo "timescaledb-toolkit-postgresql-${PG_MAJOR}" ); \
+    dnf -y clean all; \
+    rm -rf /var/cache/dnf /var/log/dnf*; \
+    # Fail the BUILD, not the client's first CREATE EXTENSION, if a control file is missing.
+    for e in timescaledb timescaledb_toolkit uuid-ossp; do \
+      test -f "/usr/pgsql-${PG_MAJOR}/share/extension/$e.control" \
+        || { echo "MISSING EXTENSION: $e"; exit 1; }; \
+    done; \
+    echo "extensions present: timescaledb timescaledb_toolkit uuid-ossp"
+
+# ----------------------------------------------------------------------------------------------
+# OpenShift still injects `fsGroup` and runs with GID 0 as a supplementary group even under a
+# non-root SCC, so every path the instance writes has to be group-0-owned and group-writable.
+# That is what this stage does. It does NOT make the image arbitrary-UID safe — see the
+# OPENSHIFT note in the header for why that is an SCC decision, not an image one.
+# ----------------------------------------------------------------------------------------------
+FROM standard AS openshift-perms
+ARG PG_MAJOR=18
+RUN set -eux; \
+    mkdir -p /var/lib/postgresql /run/postgresql; \
+    chown -R 26:0 /var/lib/postgresql /run/postgresql /usr/pgsql-${PG_MAJOR}; \
+    chmod -R g=u /var/lib/postgresql /run/postgresql; \
+    # Group-writable so the nss_wrapper escape hatch in the header note can append a passwd
+    # entry for an injected UID. Unused on the recommended (SCC) path.
+    chmod g=u /etc/passwd /etc/group
+USER 26
+
+# ----------------------------------------------------------------------------------------------
+FROM openshift-perms AS system
+ARG BARMAN_VERSION=3.14.0
+USER 0
+
+# Only needed for CNPG's in-tree backup. With the Barman Cloud Plugin sidecar (CNPG >= 1.26)
+# build `--target openshift-perms` instead and skip this whole layer.
+RUN set -eux; \
+    # snappy-devel does NOT exist in any UBI9 repo (baseos/appstream/CRB) — and is not needed:
+    # python-snappy >= 0.7 ships a pure-Python wheel backed by cramjam.
+    # python3-psycopg2 comes from pgdg-common so pip does not have to compile it against
+    # libpq headers, which is the same trick CNPG's Debian image uses with apt.
+    dnf -y install --setopt=install_weak_deps=0 \
+      python3-pip python3-psycopg2; \
+    pip3 install --no-cache-dir \
+      "barman[cloud,azure,snappy,google,zstandard,lz4]==${BARMAN_VERSION}"; \
+    dnf -y clean all; \
+    rm -rf /var/cache/dnf /var/log/dnf* /root/.cache; \
+    barman-cloud-backup --version; \
+    python3 -c "import snappy, zstandard, lz4.frame, psycopg2; print('barman codecs OK')"
+
+
+# ----------------------------------------------------------------------------------------------
+# Deliberately NO ENTRYPOINT and NO CMD: CloudNativePG mounts its own instance manager and
+# invokes it. Setting one here would be ignored at best and shadow the operator at worst.
+# ----------------------------------------------------------------------------------------------
+USER 26
+
+ARG PG_MAJOR=18
+ARG TS_VERSION=2.30.2
+LABEL name="perfana-cnpg-timescaledb" \
+      vendor="Perfana" \
+      summary="CloudNativePG operand image: UBI9, PostgreSQL ${PG_MAJOR}, TimescaleDB ${TS_VERSION} + Toolkit" \
+      description="PostgreSQL ${PG_MAJOR} on Red Hat UBI 9 with TimescaleDB (Community), \
+TimescaleDB Toolkit and uuid-ossp — the three extensions Perfana requires. \
+Runs as UID 26; needs an SCC permitting a fixed non-root UID (nonroot-v2), not restricted-v2." \
+      io.k8s.display-name="Perfana CNPG TimescaleDB" \
+      org.opencontainers.image.base.name="registry.access.redhat.com/ubi9/ubi" \
+      org.opencontainers.image.licenses="PostgreSQL AND Apache-2.0 AND Timescale-TSL"

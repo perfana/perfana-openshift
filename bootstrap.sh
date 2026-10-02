@@ -33,7 +33,7 @@ KC_URL="https://$KEYCLOAK_HOST"
 CURL=(curl -s ${CURL_OPTS:-})
 # kcadm keeps its session in $HOME; the random OpenShift uid has no writable home.
 KC=("${OC[@]}" exec deploy/keycloak -- env HOME=/tmp /opt/keycloak/bin/kcadm.sh)
-PSQL=("${OC[@]}" exec -i postgres-0 -- psql -U perfana -d perfana -v ON_ERROR_STOP=1)
+PSQL=("${OC[@]}" exec -i perfana-db-1 -c postgres -- psql -d perfana -v ON_ERROR_STOP=1)
 
 wait_for() { # url label tries
   echo "       Waiting for $2..."
