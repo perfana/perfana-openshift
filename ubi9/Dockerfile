@@ -13,7 +13,7 @@
 #
 #   ./build.sh <registry>/perfana            (see README.md)
 # ==================================================================================================
-ARG PERFANA_VERSION=0.2.96.27
+ARG PERFANA_VERSION=0.2.97.24
 ARG UBI_NODE=registry.access.redhat.com/ubi9/nodejs-20-minimal:latest
 
 FROM perfana/perfana-api:${PERFANA_VERSION} AS upstream-app

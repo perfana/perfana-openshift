@@ -10,9 +10,9 @@ Grafana (`GRAFANA_URL` in `params.env`).
 | `perfana-db` (CloudNativePG Cluster, 200Gi) | cnpg-timescaledb:18-ts2.30.2 (UBI9, PG 18.6 + TimescaleDB 2.30.2 + Toolkit) | Service `perfana-db-rw` |
 | `valkey` (StatefulSet, 5Gi) | valkey/valkey:8-alpine | Service only |
 | `keycloak` | quay.io/keycloak/keycloak:24.0 | Route `KEYCLOAK_HOST` |
-| `perfana-api` (+ `migration` initContainer) | perfana/perfana-api, perfana/perfana-migration `:0.2.96.27` | Route `API_HOST` |
-| `perfana-web` | perfana/perfana-web `:0.2.96.27` | Route `PERFANA_HOST` |
-| `perfana-worker`, `perfana-grafana-sync`, `perfana-report` | perfana/* `:0.2.96.27` | — |
+| `perfana-api` (+ `migration` initContainer) | perfana/perfana-api, perfana/perfana-migration `:0.2.97.24` | Route `API_HOST` |
+| `perfana-web` | perfana/perfana-web `:0.2.97.24` | Route `PERFANA_HOST` |
+| `perfana-worker`, `perfana-grafana-sync`, `perfana-report` | perfana/* `:0.2.97.24` | — |
 
 All Routes use edge TLS with the cluster's router certificate.
 

@@ -20,17 +20,17 @@ resources:
 # newName: <registry>/perfana-<x> and use tag <version>-ubi9.
 images:
   - name: perfana/perfana-api
-    newTag: 0.2.96.27
+    newTag: 0.2.97.24
   - name: perfana/perfana-web
-    newTag: 0.2.96.27
+    newTag: 0.2.97.24
   - name: perfana/perfana-worker
-    newTag: 0.2.96.27
+    newTag: 0.2.97.24
   - name: perfana/perfana-grafana-sync
-    newTag: 0.2.96.27
+    newTag: 0.2.97.24
   - name: perfana/perfana-report
-    newTag: 0.2.96.27
+    newTag: 0.2.97.24
   - name: perfana/perfana-migration
-    newTag: 0.2.96.27
+    newTag: 0.2.97.24
 
 configMapGenerator:
   - name: perfana-params

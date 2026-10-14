@@ -21,7 +21,7 @@ instead, push them (e.g. `./build.sh "$(oc registry info --public)/perfana"` aft
 
 ```yaml
     newName: image-registry.openshift-image-registry.svc:5000/perfana/perfana-api
-    newTag: 0.2.96.27-ubi9
+    newTag: 0.2.97.24-ubi9
 ```
 
 With them, perfana-web no longer needs the `nonroot-v2` SCC: drop its `serviceAccountName`/

@@ -3,7 +3,7 @@
 # Tags: <repo>/perfana-<component>:<version>-ubi9 and <repo>/cnpg-timescaledb:18-ts2.30.2
 set -euo pipefail
 REPO="${1:?usage: $0 <registry/namespace> [version]}"
-VERSION="${2:-0.2.96.27}"
+VERSION="${2:-0.2.97.24}"
 PLATFORM="${PLATFORM:-linux/amd64}"
 cd "$(dirname "$0")"
 push() { [[ -n "${NO_PUSH:-}" ]] || docker push "$1"; }
