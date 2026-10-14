@@ -1,8 +1,7 @@
 # Perfana on OpenShift
 
 Kustomize manifests to deploy Perfana on OpenShift 4.11+. They mirror the docker compose
-deployment in `perfana-demo` branch `poc-windows-wsl`: same Perfana release (as UBI9 images, see
-`ubi9/`), same tuning,
+deployment in `perfana-demo` branch `poc-windows-wsl`: same Perfana images and tags, same tuning,
 same Keycloak realm and bootstrap steps. Grafana is not deployed: Perfana uses an existing
 Grafana (`GRAFANA_URL` in `params.env`).
 
@@ -11,9 +10,9 @@ Grafana (`GRAFANA_URL` in `params.env`).
 | `perfana-db` (CloudNativePG Cluster, 200Gi) | cnpg-timescaledb:18-ts2.30.2 (UBI9, PG 18.6 + TimescaleDB 2.30.2 + Toolkit) | Service `perfana-db-rw` |
 | `valkey` (StatefulSet, 5Gi) | valkey/valkey:8-alpine | Service only |
 | `keycloak` | quay.io/keycloak/keycloak:24.0 | Route `KEYCLOAK_HOST` |
-| `perfana-api` (+ `migration` initContainer) | perfana-api, perfana-migration `:0.2.96.27-ubi9` | Route `API_HOST` |
-| `perfana-web` | perfana-web `:0.2.96.27-ubi9` | Route `PERFANA_HOST` |
-| `perfana-worker`, `perfana-grafana-sync`, `perfana-report` | perfana-* `:0.2.96.27-ubi9` | — |
+| `perfana-api` (+ `migration` initContainer) | perfana/perfana-api, perfana/perfana-migration `:0.2.96.27` | Route `API_HOST` |
+| `perfana-web` | perfana/perfana-web `:0.2.96.27` | Route `PERFANA_HOST` |
+| `perfana-worker`, `perfana-grafana-sync`, `perfana-report` | perfana/* `:0.2.96.27` | — |
 
 All Routes use edge TLS with the cluster's router certificate.
 
@@ -23,11 +22,11 @@ All Routes use edge TLS with the cluster's router certificate.
 # Prerequisite: the CloudNativePG operator (OperatorHub: "CloudNativePG"), cluster-wide or in this namespace
 oc new-project perfana            # namespace is set in kustomization.yaml
 
-# Perfana + CNPG UBI9 images -> the internal registry, perfana namespace (needs docker + the registry's
+# CNPG database image (UBI9) -> the internal registry, perfana namespace (needs docker + the registry's
 # external route: oc patch configs.imageregistry.operator.openshift.io/cluster --type merge \
 #   -p '{"spec":{"defaultRoute":true}}'   — cluster-admin, once)
 oc registry login
-ubi9/build.sh "$(oc registry info --public)/perfana"
+COMPONENTS= ubi9/build.sh "$(oc registry info --public)/perfana"
 vi params.env                     # Route hostnames, GRAFANA_URL, proxy
 cp secrets.env.example secrets.env && vi secrets.env   # strong values, see comments
 oc apply -k .
@@ -44,14 +43,20 @@ role), and creates a Perfana API key, which it prints once.
 
 - **The CloudNativePG operator** (1.25+), installed from OperatorHub.
 - **cluster-admin, once**, to create `manifests/rbac.yaml`. It grants the `nonroot-v2` SCC to the
-  `perfana-db` service account that CNPG creates for the database pods: `initdb` refuses to run
-  under a random UID, so they run as the image's uid 26. Everything else runs under the default
-  `restricted-v2` SCC.
-- The Perfana images come from the OpenShift internal registry (built by `ubi9/build.sh`, see
-  Install). To use another registry, change `newName` under `images:` in `kustomization.yaml`
-  and link its pull secret: `oc secrets link default <secret> --for=pull`.
-- valkey and keycloak are pulled from Docker Hub and quay.io. Behind a mirror, add them to
-  `images:` as well. The database image is set in `manifests/postgres-cluster.yaml` (`imageName`).
+  `perfana-db` service account that CNPG creates for the database pods, and to the `nonroot`
+  service account used by perfana-web:
+  - perfana-db (uid 26): `initdb` refuses to run under a random UID.
+  - perfana-web (uid 65532): at startup it narrows the CSP in `routes-manifest.json` to your hosts.
+    Under a random UID that write fails, and the looser build-time CSP stays, which allows any
+    `https:` origin in `frame-src`/`connect-src`. The app still works, but the CSP is less strict.
+
+  Everything else runs under the default `restricted-v2` SCC.
+- The Perfana images are pulled from Docker Hub (`perfana/*`, public), valkey from Docker Hub and
+  keycloak from quay.io. Behind a mirror, add `newName` under `images:` in `kustomization.yaml`;
+  for a private registry, link its pull secret: `oc secrets link default <secret> --for=pull`
+  (and for `nonroot`).
+- UBI9 builds of the Perfana images are available in `ubi9/` (see its README for the tradeoffs);
+  to use them, build and push them and point `images:` at them. The database image is set in `manifests/postgres-cluster.yaml` (`imageName`).
 - An existing Grafana that both the browser and the perfana-worker / perfana-grafana-sync pods can
   reach. Its CSP and X-Frame settings must allow embedding (`allow_embedding = true`) from `PERFANA_HOST`.
   It must have the `grafana-pyroscope-app` plugin installed (e.g. `GF_PLUGINS_PREINSTALL_SYNC=grafana-pyroscope-app`).
@@ -62,8 +67,7 @@ role), and creates a Perfana API key, which it prints once.
 
 ## Upgrade
 
-Build the new release (`ubi9/build.sh "$(oc registry info --public)/perfana" <version>`), bump
-`newTag` under `images:` in `kustomization.yaml` to `<version>-ubi9`, then run `oc apply -k .`.
+Bump `newTag` under `images:` in `kustomization.yaml`, then run `oc apply -k .`.
 The new perfana-api pod runs the migrations in its initContainer before it starts.
 
 ## Differences from poc-windows-wsl

@@ -1,11 +1,21 @@
-# The CNPG operand image runs as uid 26; initdb refuses the random uid restricted-v2 assigns
-# ("could not look up effective user ID ... user does not exist"). nonroot-v2 permits any
-# non-zero uid and nothing more. The ServiceAccount is created by CNPG (named after the
-# Cluster). Granting this needs cluster-admin (or "use" on that SCC).
+# Two workloads must run as the uid built into their image, which restricted-v2 (random
+# uid) does not allow. nonroot-v2 permits any non-zero uid and nothing more. Granting it
+# needs cluster-admin (or "use" on that SCC).
+#   perfana-db  (SA created by CNPG) the operand image runs as uid 26; initdb refuses a
+#               random uid ("could not look up effective user ID ... user does not exist")
+#   perfana-web (SA nonroot) start-server.js narrows the CSP in .next/routes-manifest.json
+#               to the configured hosts at boot; the file is owned by 65532, so under a
+#               random uid the write fails and the looser build-time CSP stays (any https:
+#               origin in frame-src/connect-src). Not needed with the ubi9/ images.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nonroot
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: perfana-db-scc-nonroot-v2
+  name: scc-nonroot-v2
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -13,3 +23,5 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: perfana-db
+  - kind: ServiceAccount
+    name: nonroot

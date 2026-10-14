@@ -8,7 +8,8 @@ PLATFORM="${PLATFORM:-linux/amd64}"
 cd "$(dirname "$0")"
 push() { [[ -n "${NO_PUSH:-}" ]] || docker push "$1"; }
 
-for c in api web worker grafana-sync report migration; do
+# COMPONENTS= (empty) builds only the CNPG database image.
+for c in ${COMPONENTS-api web worker grafana-sync report migration}; do
   docker build --platform "$PLATFORM" --build-arg PERFANA_VERSION="$VERSION" \
     --target "$c" -t "$REPO/perfana-$c:$VERSION-ubi9" .
   push "$REPO/perfana-$c:$VERSION-ubi9"

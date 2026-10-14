@@ -15,10 +15,17 @@ plus the database image `<repo>/cnpg-timescaledb:18-ts2.30.2` from `Containerfil
 CloudNativePG operand: UBI9, PostgreSQL 18.6 (PGDG), TimescaleDB 2.30.2, Toolkit, uuid-ossp, uid 26.
 By default it builds the `openshift-perms` target without barman; `CNPG_TARGET=system` adds barman-cloud.
 
-`../kustomization.yaml` deploys them from the OpenShift internal registry
-(`image-registry.openshift-image-registry.svc:5000/perfana/...`). Push there with
-`./build.sh "$(oc registry info --public)/perfana"` after `oc registry login`, or change `newName`
-in `../kustomization.yaml` to use another registry.
+`../kustomization.yaml` deploys the upstream `perfana/*` images by default. To deploy these
+instead, push them (e.g. `./build.sh "$(oc registry info --public)/perfana"` after
+`oc registry login`) and add to each Perfana entry under `images:`:
+
+```yaml
+    newName: image-registry.openshift-image-registry.svc:5000/perfana/perfana-api
+    newTag: 0.2.96.27-ubi9
+```
+
+With them, perfana-web no longer needs the `nonroot-v2` SCC: drop its `serviceAccountName`/
+`securityContext` and the `nonroot` subject in `../manifests/rbac.yaml`.
 
 Notes
 - `/app` belongs to group 0 and is group-writable, so every image runs under the default
