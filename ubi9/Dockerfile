@@ -2,7 +2,7 @@
 # ==================================================================================================
 # Perfana on Red Hat UBI9
 # --------------------------------------------------------------------------------------------------
-# Repackages the published Perfana release onto ubi9/nodejs-20-minimal; nothing is rebuilt.
+# Repackages the published Perfana release onto ubi9/nodejs-24-minimal; nothing is rebuilt.
 # The upstream images install dependencies with --ignore-scripts and run the same /app on
 # Debian (distroless) as on Alpine, so /app is portable; the only native addons
 # (msgpackr-extract) ship glibc prebuilds, which UBI9 satisfies.
@@ -14,7 +14,7 @@
 #   ./build.sh <registry>/perfana            (see README.md)
 # ==================================================================================================
 ARG PERFANA_VERSION=0.2.97.24
-ARG UBI_NODE=registry.access.redhat.com/ubi9/nodejs-20-minimal:latest
+ARG UBI_NODE=registry.access.redhat.com/ubi9/nodejs-24-minimal:latest
 
 FROM perfana/perfana-api:${PERFANA_VERSION} AS upstream-app
 FROM perfana/perfana-migration:${PERFANA_VERSION} AS upstream-migration

@@ -1,6 +1,6 @@
 # Perfana UBI9 images
 
-Builds the Perfana components on Red Hat UBI9 (`registry.access.redhat.com/ubi9/nodejs-20-minimal`).
+Builds the Perfana components on Red Hat UBI9 (`registry.access.redhat.com/ubi9/nodejs-24-minimal`).
 They are repackaged from the published `perfana/*` release images, so no Perfana source is needed
 and the application code is identical to upstream.
 
